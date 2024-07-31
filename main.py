@@ -323,6 +323,7 @@ def main():
 
         if args.seed is not None:
             args.seed = args.seed + 1
+        tsne(args, test_loader, model, re)
 
     re_accs = pd.DataFrame(re_accs)
     re_accs.to_csv(f'./results/fixmatch_{args.dataset}_{args.num_labeled}_result.csv')
@@ -450,7 +451,7 @@ def train(args, labeled_trainloader, unlabeled_trainloader, test_loader,
             test_model = model
 
         if args.local_rank in [-1, 0]:
-            test_loss, test_acc = test(args, test_loader, test_model, epoch, repeat)
+            test_loss, test_acc = test(args, test_loader, test_model)
 
             args.writer.add_scalar('train/1.train_loss', losses.avg, epoch)
             args.writer.add_scalar('train/2.train_loss_x', losses_x.avg, epoch)
@@ -485,19 +486,13 @@ def train(args, labeled_trainloader, unlabeled_trainloader, test_loader,
     if args.local_rank in [-1, 0]:
         args.writer.close()
 
-
-
-
-def test(args, test_loader, model, epoch, repeat):
+def test(args, test_loader, model):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
     top5 = AverageMeter()
     end = time.time()
-
-    features = []
-    targets_all = []
 
     # local rank가 -1, 0이면 데이터 로딩의 진행 상태를 시각적으로 표시함.
     if not args.no_progress:
@@ -512,10 +507,6 @@ def test(args, test_loader, model, epoch, repeat):
             targets = targets.to(args.device)
             outputs = model(inputs)
             loss = F.cross_entropy(outputs, targets)
-            _, preds = torch.max(outputs, 1)
-
-            features.append(outputs.cpu().numpy())
-            targets_all.append(targets.cpu().numpy())
 
             prec1, prec5 = accuracy(outputs, targets, topk=(1, 5))
             losses.update(loss.item(), inputs.shape[0])
@@ -540,28 +531,46 @@ def test(args, test_loader, model, epoch, repeat):
     logger.info("top-1 acc: {:.2f}".format(top1.avg))
     logger.info("top-5 acc: {:.2f}".format(top5.avg))
 
-    features = np.concatenate(features)
-    targets_all = np.concatenate(targets_all)
-
-    tsne = TSNE(n_components=2, random_state=args.seed)
-    tsne_results = tsne.fit_transform(features)
-
-    plt.figure(figsize=(16, 10))
-
-    cifar10_classes = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
-    colors = plt.cm.tab10(np.linspace(0,1,len(cifar10_classes)))
-
-    for i, class_name in enumerate(cifar10_classes):
-        indices = targets_all == i
-        plt.scatter(tsne_results[:, 0], tsne_results[:, 1], color=colors[i], label=class_name, alpha=0.7)
-
-    plt.legend(loc='best')
-    plt.title(f"TSNE of {args.dataset}")
-    plt.savefig(f"./plot/tsne_{args.dataset}_{args.num_labeled}_{repeat}.png")
-    plt.close()
-
     return losses.avg, top1.avg
 
+def tsne(args, test_loader, model, repeat):
+    features = []
+    targets_all = []
+
+    if not args.no_progress:
+        test_loader = tqdm(test_loader, disable=args.local_rank not in [-1,0])
+
+    with torch.no_grad():
+        for batch_idx, (inputs, targets) in enumerate(test_loader):
+            model.eval()
+
+            inputs = inputs.to(args.device)
+            targets = targets.to(args.device)
+            outputs = model(inputs)
+
+            features.append(outputs.cpu().numpy())
+            targets_all.append(targets.cpu().numpy())
+
+        features = np.concatenate(features)
+        targets_all = np.concatenate(targets_all)
+
+        tsne = TSNE(n_components=2, random_state=args.seed)
+        tsne_results = tsne.fit_transform(features)
+
+        plt.figure(figsize=(10,10))
+        cifar10_classes = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
+        colors = plt.cm.tab10(np.linspace(0, 1, len(cifar10_classes)))
+
+        for i, class_name in enumerate(cifar10_classes):
+            indices = targets_all == i
+            plt.scatter(tsne_results[indices, 0], tsne_results[indices, 1], color=colors[i], label=class_name, alpha=0.6)
+
+        plt.legend(loc='best')
+        plt.xlabel("t-SNE Dimension 1")
+        plt.ylabel("t-SNE Dimention 2")
+        plt.title(f"TSNE of {args.dataset}")
+        plt.savefig(f"./plot/tsne_{args.dataset}_{args.num_labeled}_{repeat}.png")
+        plt.close()
 
 if __name__ == '__main__':
     main()
