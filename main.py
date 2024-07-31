@@ -319,7 +319,7 @@ def main():
         model.zero_grad()
         train(args, labeled_trainloader, unlabeled_trainloader, test_loader,
               model, optimizer, ema_model, scheduler, re)
-        re_accs[repeat][0] = best_acc
+        re_accs[re][0] = best_acc
 
         if args.seed is not None:
             args.seed = args.seed + 1
@@ -557,7 +557,7 @@ def test(args, test_loader, model, epoch, repeat):
 
     plt.legend(loc='best')
     plt.title(f"TSNE of {args.dataset}")
-    plt.savefig(f"./results/plot/tsne_{args.dataset}_{args.num_labeled}_{repeat}.png")
+    plt.savefig(f"./plot/tsne_{args.dataset}_{args.num_labeled}_{repeat}.png")
     plt.close()
 
     return losses.avg, top1.avg

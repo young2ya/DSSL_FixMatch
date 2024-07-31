@@ -36,7 +36,7 @@ def accuracy(output, target, topk=(1,)):
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
 
-# Computes and stores the average and cirrent value
+# Computes and stores the average and current value
 class AverageMeter(object):
     def __init__(self):
         self.reset()
